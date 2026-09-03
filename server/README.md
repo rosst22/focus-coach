@@ -108,6 +108,13 @@ cd /opt/focus-coach && git pull && chown -R focuscoach:focuscoach /opt/focus-coa
 systemctl restart focus-coach-api
 ```
 
+The files are owned by `focuscoach` but you pull as root, which git refuses by
+default. Already configured on this box; on a fresh one you need it once:
+
+```bash
+git config --global --add safe.directory /opt/focus-coach
+```
+
 ### Signing in before Resend is configured
 
 With `RESEND_API_KEY` blank the codes go to the journal instead of an inbox,
