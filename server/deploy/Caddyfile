@@ -1,18 +1,20 @@
-# Install to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
-# Caddy gets and renews the HTTPS certificate automatically. Replace the
-# hostname with yours — a certificate cannot be issued for a bare IP.
+# This VPS already runs Caddy for other apps, so Focus Coach is NOT a standalone
+# Caddyfile — paste the block below INSIDE the existing api.rosstoma.me site
+# block in /etc/caddy/Caddyfile, above the catch-all `handle`. Overwriting the
+# whole file would take the other services down with it.
+#
+# handle_path strips the prefix, so /focuscoach/health reaches the app as /health.
+#
+#   api.rosstoma.me {
+#       handle_path /focuscoach/* {
+#           reverse_proxy 127.0.0.1:8080
+#       }
+#       ... existing blocks ...
+#   }
+#
+# Note: `rate_limit` is a custom-build Caddy module and is NOT in the standard
+# apt build. Rate limiting lives in the app (see rate_limit() in main.py).
 
-api.yourdomain.com {
-    encode gzip
-
-    # Rough abuse ceiling in front of the app's own per-user quota.
-    rate_limit {
-        zone api {
-            key    {remote_host}
-            events 120
-            window 1m
-        }
-    }
-
+handle_path /focuscoach/* {
     reverse_proxy 127.0.0.1:8080
 }

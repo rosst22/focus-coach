@@ -8,6 +8,7 @@ import hashlib
 import logging
 import secrets
 import time
+from collections import defaultdict, deque
 
 from pathlib import Path
 
@@ -46,6 +47,33 @@ def _hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+# --------------------------------------------------------- rate limiting
+# The unauthenticated endpoints are the abuse surface: someone could use
+# /auth/request-code to send mail to strangers. Caddy's rate_limit module is a
+# custom build, so the ceiling lives here instead. In-memory is fine because
+# the service runs a single worker.
+_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    # Behind Caddy, request.client.host is always 127.0.0.1.
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+
+def rate_limit(request: Request, bucket: str, limit: int, window_seconds: int) -> None:
+    if len(_hits) > 5000:          # crude guard against unbounded growth
+        _hits.clear()
+    key = f"{bucket}:{_client_ip(request)}"
+    seen = _hits[key]
+    cutoff = time.time() - window_seconds
+    while seen and seen[0] < cutoff:
+        seen.popleft()
+    if len(seen) >= limit:
+        raise HTTPException(429, "too many requests — wait a few minutes")
+    seen.append(time.time())
+
+
 # ------------------------------------------------------------------- auth
 
 def current_user(authorization: str = Header(default="")):
@@ -67,7 +95,8 @@ class VerifyIn(BaseModel):
 
 
 @app.post("/auth/request-code")
-async def request_code(body: EmailIn):
+async def request_code(body: EmailIn, request: Request):
+    rate_limit(request, "code", limit=10, window_seconds=3600)
     email = body.email.lower()
     existing = db.get_code(email)
     if existing and db.now() - existing["created_at"] < config.CODE_COOLDOWN_SECONDS:
@@ -84,7 +113,8 @@ async def request_code(body: EmailIn):
 
 
 @app.post("/auth/verify")
-def verify(body: VerifyIn):
+def verify(body: VerifyIn, request: Request):
+    rate_limit(request, "verify", limit=20, window_seconds=3600)
     email = body.email.lower()
     row = db.get_code(email)
     if not row:

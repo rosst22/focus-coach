@@ -1,18 +1,23 @@
 # Install to /etc/systemd/system/focus-coach-api.service
 [Unit]
 Description=Focus Coach API
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=focuscoach
+Group=focuscoach
 WorkingDirectory=/opt/focus-coach/server
 EnvironmentFile=/opt/focus-coach/server/.env
+# Bind to localhost only: the outside world arrives through Caddy over HTTPS.
+# Single worker — the in-app rate limiter keeps state in memory.
 ExecStart=/opt/focus-coach/server/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8080 --workers 1
 Restart=always
 RestartSec=3
 
-# The service should not be able to touch anything but its own data.
+# This service takes unauthenticated input from the internet, so unlike the
+# other apps on this box it does not run as root.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
