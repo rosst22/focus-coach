@@ -60,46 +60,61 @@ so you can test the whole sign-in flow before Resend is configured.
 Point the extension at it: popup → Settings → Advanced → API server →
 `http://localhost:8931`.
 
-## Deploy to the VPS
+## Deployed at
 
-On `ross-server` as root:
+`https://api.rosstoma.me/focuscoach` — on `ross-server`, behind the Caddy that
+already serves rosstoma.me, FitTrack and Post Streak.
+
+That host was already taken by FitTrack, and there is no wildcard DNS on
+rosstoma.me, so Focus Coach is mounted at a **path prefix** the same way Post
+Streak is. `handle_path` strips it, so `/focuscoach/health` reaches the app as
+`/health`. No DNS record was needed.
+
+| | |
+| --- | --- |
+| Code | `/opt/focus-coach` (a clone of this repo) |
+| Runs as | `focuscoach` (non-root — unlike the other services on the box) |
+| Binds | `127.0.0.1:8080` (8000 = FitTrack, 8001 = Post Streak) |
+| Database | `/var/lib/focus-coach/app.db` |
+| Secrets | `/opt/focus-coach/server/.env`, mode 600 |
+| Logs | `journalctl -u focus-coach-api -f` |
+
+### Deploying it somewhere else
 
 ```bash
-adduser --system --group --home /opt/focus-coach focuscoach
+adduser --system --group --home /opt/focus-coach --no-create-home focuscoach
 mkdir -p /var/lib/focus-coach && chown focuscoach:focuscoach /var/lib/focus-coach
-
 git clone https://github.com/rosst22/focus-coach /opt/focus-coach
 cd /opt/focus-coach/server
 python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
-cp .env.example .env && nano .env          # real keys go here
+cp .env.example .env && nano .env
 chmod 600 .env && chown -R focuscoach:focuscoach /opt/focus-coach
-
 cp deploy/focus-coach-api.service /etc/systemd/system/
 systemctl enable --now focus-coach-api
-systemctl status focus-coach-api
 ```
 
-Then HTTPS. **You need a domain** — Let's Encrypt will not issue a certificate
-for a bare IP, and the extension must not talk to the server over plain HTTP.
-A cheap `.com` is about $10/yr; free options are a DuckDNS or nip.io subdomain,
-both of which Caddy can get a certificate for.
+Then put the `handle_path` block from `deploy/Caddyfile` inside your existing
+site block — **do not replace `/etc/caddy/Caddyfile`**, other apps live in it.
+`caddy validate --config /etc/caddy/Caddyfile` before `systemctl reload caddy`.
 
-```bash
-apt install caddy
-cp deploy/Caddyfile /etc/caddy/Caddyfile
-nano /etc/caddy/Caddyfile                  # put your hostname in
-systemctl reload caddy
-curl https://api.yourdomain.com/health
-```
-
-Finally set `DEFAULT_API_BASE` in `lib/backend.js` to that hostname and reload
-the extension.
+Note: `rate_limit` is a custom-build Caddy module and is not in the apt build.
+Rate limiting is done in the app instead (10 code requests / 20 verifies per IP
+per hour).
 
 ### Updating
 
 ```bash
-cd /opt/focus-coach && git pull
+cd /opt/focus-coach && git pull && chown -R focuscoach:focuscoach /opt/focus-coach
 systemctl restart focus-coach-api
+```
+
+### Signing in before Resend is configured
+
+With `RESEND_API_KEY` blank the codes go to the journal instead of an inbox,
+which means only someone with server access can sign in — a usable private beta:
+
+```bash
+journalctl -u focus-coach-api --since "2 minutes ago" | grep "DEV login code"
 ```
 
 ## Billing (optional — everything else works without it)
