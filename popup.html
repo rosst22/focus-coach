@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Focus Coach</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <span class="dot" id="dot"></span>
+      <h1>Focus Coach</h1>
+      <span class="verdict" id="verdict"></span>
+    </header>
+
+    <section class="pad">
+      <label for="goal">What are you working on?</label>
+      <input id="goal" type="text" placeholder="e.g. STAB22 problem set 3" />
+      <button id="toggle" class="primary wide">Start session</button>
+    </section>
+
+    <section class="stats" id="stats">
+      <div><b id="statFocus">0m</b><span>focused</span></div>
+      <div><b id="statDrift">0m</b><span>drifted</span></div>
+      <div><b id="statStreak">0m</b><span>streak</span></div>
+    </section>
+
+    <section class="pad">
+      <label for="taskInput">Tasks — tick one to get cheered on</label>
+      <div class="row">
+        <input id="taskInput" type="text" placeholder="Add a task and press Enter" />
+      </div>
+      <ul id="tasks"></ul>
+    </section>
+
+    <details class="pad">
+      <summary>Settings</summary>
+
+      <label for="tone">Coach tone</label>
+      <select id="tone">
+        <option value="hype">Hype — loud and enthusiastic</option>
+        <option value="calm">Calm — quiet and kind</option>
+        <option value="coach">Coach — blunt, no fluff</option>
+      </select>
+
+      <label class="check">
+        <input type="checkbox" id="smartMode" />
+        Smart mode — let Claude read the page and write the line
+      </label>
+
+      <div id="smartBox" class="nested">
+        <label for="apiKey">Anthropic API key</label>
+        <input id="apiKey" type="password" placeholder="sk-ant-..." />
+
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="claude-opus-5">Opus 5 — sharpest, ~$5/$25 per Mtok</option>
+          <option value="claude-sonnet-5">Sonnet 5 — cheaper, ~$2/$10</option>
+          <option value="claude-haiku-4-5">Haiku 4.5 — cheapest, ~$1/$5</option>
+        </select>
+
+        <label class="check">
+          <input type="checkbox" id="useScreenshots" />
+          Send a screenshot of the tab (better judgement, costs more)
+        </label>
+
+        <button id="testKey" class="ghost wide">Test the key</button>
+        <p class="note" id="testResult"></p>
+        <p class="note">
+          At most one API call per minute, and only when the free rules are unsure
+          or you're drifting. Budget roughly $0.01–0.05 an hour with screenshots on.
+        </p>
+      </div>
+
+      <label for="focusSites">Always focus (one per line)</label>
+      <textarea id="focusSites" rows="3" placeholder="q.utoronto.ca&#10;github.com"></textarea>
+
+      <label for="distractSites">Always distraction (one per line)</label>
+      <textarea id="distractSites" rows="3" placeholder="youtube.com&#10;reddit.com"></textarea>
+
+      <button id="save" class="ghost wide">Save settings</button>
+    </details>
+
+    <footer id="footer"></footer>
+    <script src="popup.js"></script>
+  </body>
+</html>
