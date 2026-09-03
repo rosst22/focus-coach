@@ -8,6 +8,15 @@
 import { classify } from "./lib/heuristics.js";
 import { pick } from "./lib/messages.js";
 import { askClaude } from "./lib/claude.js";
+import {
+  askBackend,
+  requestCode,
+  verifyCode,
+  me,
+  signOut,
+  checkoutUrl,
+  DEFAULT_API_BASE
+} from "./lib/backend.js";
 
 const TICK_ALARM = "focus-coach-tick";
 const TICK_MINUTES = 0.5;              // 30s is the shortest period Chrome allows
@@ -24,8 +33,10 @@ const MILESTONES_MIN = [5, 10, 20, 30, 45, 60, 90, 120];
 const DEFAULT_SETTINGS = {
   tone: "hype",                 // hype | calm | coach
   smartMode: false,
-  apiKey: "",
-  model: "claude-opus-5",
+  keyMode: "account",           // "account" = our server pays; "own" = user's key
+  apiBase: DEFAULT_API_BASE,
+  apiKey: "",                   // only used when keyMode === "own"
+  model: "claude-opus-5",       // only used when keyMode === "own"
   useScreenshots: false,
   focusSites: [],
   distractSites: [],
@@ -52,6 +63,7 @@ const BLANK_SESSION = {
   lastPageKey: "",
   lastClaudeAt: 0,
   lastClaudeError: "",
+  smartPausedUntil: 0,   // set when the daily quota runs out
   claudeCalls: 0,
   claudeInTokens: 0,
   claudeOutTokens: 0
@@ -59,16 +71,31 @@ const BLANK_SESSION = {
 
 // ---------------------------------------------------------------- storage
 
+const BLANK_AUTH = { token: "", email: "", plan: "free", quota: 0, usedToday: 0 };
+
 async function getAll() {
-  const got = await chrome.storage.local.get(["settings", "session"]);
+  const got = await chrome.storage.local.get(["settings", "session", "auth"]);
   return {
     settings: { ...DEFAULT_SETTINGS, ...(got.settings || {}) },
-    session: { ...BLANK_SESSION, ...(got.session || {}) }
+    session: { ...BLANK_SESSION, ...(got.session || {}) },
+    auth: { ...BLANK_AUTH, ...(got.auth || {}) }
   };
 }
 
 const saveSession = (session) => chrome.storage.local.set({ session });
 const saveSettings = (settings) => chrome.storage.local.set({ settings });
+const saveAuth = (auth) => chrome.storage.local.set({ auth });
+
+// Routes one classification to whichever brain is configured: our hosted API
+// (the default — no key needed) or the user's own Anthropic key.
+async function smartVerdict(settings, auth, ctx) {
+  if (settings.keyMode === "own") {
+    if (!settings.apiKey) throw new Error("no API key set");
+    return askClaude({ apiKey: settings.apiKey, model: settings.model, ...ctx });
+  }
+  if (!auth.token) throw new Error("sign in to use smart mode");
+  return askBackend({ apiBase: settings.apiBase || DEFAULT_API_BASE, token: auth.token, ...ctx });
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -156,7 +183,7 @@ async function coach(tabId, payload) {
 // ---------------------------------------------------------------- the tick
 
 async function tick(trigger = "alarm") {
-  const { settings, session } = await getAll();
+  const { settings, session, auth } = await getAll();
   if (!session.active) {
     await setBadge(session);
     return;
@@ -192,9 +219,11 @@ async function tick(trigger = "alarm") {
 
   // Ask Claude only when it can actually change the answer: the heuristic is
   // unsure, or we're about to nag. Rate-limited so a long session is cheap.
+  const hasCredential = settings.keyMode === "own" ? Boolean(settings.apiKey) : Boolean(auth.token);
   const wantSmart =
     settings.smartMode &&
-    settings.apiKey &&
+    hasCredential &&
+    now > session.smartPausedUntil &&
     now - session.lastClaudeAt > CLAUDE_MIN_GAP_MS &&
     (!result.confident || result.verdict === "drift" || pageKey !== prevPageKey);
 
@@ -203,9 +232,7 @@ async function tick(trigger = "alarm") {
     const ctx = await tabContext(tab.id);
     const shot = settings.useScreenshots ? await screenshot(tab.windowId) : null;
     try {
-      const verdictFromClaude = await askClaude({
-        apiKey: settings.apiKey,
-        model: settings.model,
+      const verdictFromClaude = await smartVerdict(settings, auth, {
         tone: settings.tone,
         goal: session.goal,
         tasks: session.tasks,
@@ -227,9 +254,22 @@ async function tick(trigger = "alarm") {
         session.claudeInTokens += verdictFromClaude.usage.input_tokens || 0;
         session.claudeOutTokens += verdictFromClaude.usage.output_tokens || 0;
       }
+      if (verdictFromClaude.usedToday !== undefined) {
+        await saveAuth({ ...auth, usedToday: verdictFromClaude.usedToday, quota: verdictFromClaude.quota });
+      }
     } catch (err) {
       // Never let an API problem stop the coach — fall back to the free path.
       session.lastClaudeError = String(err.message || err);
+      if (err.status === 401) {
+        // Session expired server-side: drop the token so the popup prompts a sign-in.
+        await saveAuth({ ...BLANK_AUTH });
+      } else if (err.status === 429) {
+        // Out of quota for the day. Stop asking until UTC midnight; the free
+        // heuristics carry the coach in the meantime.
+        const midnight = new Date();
+        midnight.setUTCHours(24, 0, 0, 0);
+        session.smartPausedUntil = midnight.getTime();
+      }
     }
   }
 
@@ -356,7 +396,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     switch (msg.type) {
       case "GET_STATE": {
         const streakMs = session.streakStartAt ? Date.now() - session.streakStartAt : 0;
-        sendResponse({ settings, session, streakMs });
+        sendResponse({ settings, session, auth, streakMs });
         break;
       }
 
@@ -441,6 +481,75 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         session.driftLastNudgeAt = Date.now();
         await saveSession(session);
         sendResponse({ ok: true });
+        break;
+      }
+
+      case "AUTH_REQUEST_CODE": {
+        try {
+          await requestCode(settings.apiBase || DEFAULT_API_BASE, msg.email);
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: String(err.message || err) });
+        }
+        break;
+      }
+
+      case "AUTH_VERIFY": {
+        try {
+          const out = await verifyCode(settings.apiBase || DEFAULT_API_BASE, msg.email, msg.code);
+          await saveAuth({
+            token: out.token,
+            email: out.email,
+            plan: out.plan,
+            quota: out.quota,
+            usedToday: 0
+          });
+          // Signing in is the whole point of smart mode — turn it on.
+          await saveSettings({ ...settings, smartMode: true, keyMode: "account" });
+          sendResponse({ ok: true, email: out.email, plan: out.plan });
+        } catch (err) {
+          sendResponse({ ok: false, error: String(err.message || err) });
+        }
+        break;
+      }
+
+      case "AUTH_REFRESH": {
+        if (!auth.token) {
+          sendResponse({ ok: false, error: "not signed in" });
+          break;
+        }
+        try {
+          const out = await me(settings.apiBase || DEFAULT_API_BASE, auth.token);
+          await saveAuth({
+            token: auth.token,
+            email: out.email,
+            plan: out.plan,
+            quota: out.quota,
+            usedToday: out.used_today
+          });
+          sendResponse({ ok: true, ...out });
+        } catch (err) {
+          if (err.status === 401) await saveAuth({ ...BLANK_AUTH });
+          sendResponse({ ok: false, error: String(err.message || err) });
+        }
+        break;
+      }
+
+      case "AUTH_SIGNOUT": {
+        if (auth.token) await signOut(settings.apiBase || DEFAULT_API_BASE, auth.token);
+        await saveAuth({ ...BLANK_AUTH });
+        sendResponse({ ok: true });
+        break;
+      }
+
+      case "BILLING_CHECKOUT": {
+        try {
+          const out = await checkoutUrl(settings.apiBase || DEFAULT_API_BASE, auth.token);
+          await chrome.tabs.create({ url: out.url });
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: String(err.message || err) });
+        }
         break;
       }
 

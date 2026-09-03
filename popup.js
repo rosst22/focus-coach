@@ -49,17 +49,34 @@ function renderTasks() {
 function renderSettings(s) {
   $("tone").value = s.tone;
   $("smartMode").checked = s.smartMode;
+  $("keyMode").checked = s.keyMode === "own";
   $("apiKey").value = s.apiKey;
   $("model").value = s.model;
+  $("apiBase").value = s.apiBase || "";
   $("useScreenshots").checked = s.useScreenshots;
   $("focusSites").value = (s.focusSites || []).join("\n");
   $("distractSites").value = (s.distractSites || []).join("\n");
-  $("smartBox").style.display = s.smartMode ? "block" : "none";
+  $("ownKeyBox").style.display = s.keyMode === "own" ? "block" : "none";
+}
+
+function renderAccount(auth) {
+  const signedIn = Boolean(auth.token);
+  $("signedIn").style.display = signedIn ? "block" : "none";
+  $("signedOut").style.display = signedIn ? "none" : "block";
+  if (!signedIn) return;
+
+  $("acctEmail").textContent = auth.email;
+  $("acctPlan").textContent = auth.plan;
+  $("acctPlan").className = `pill${auth.plan === "pro" ? " pro" : ""}`;
+  $("acctUsage").textContent = auth.quota
+    ? `${auth.usedToday} / ${auth.quota} smart checks used today`
+    : "";
+  $("upgrade").style.display = auth.plan === "pro" ? "none" : "block";
 }
 
 async function refresh(full = false) {
   state = await send({ type: "GET_STATE" });
-  const { session, settings, streakMs } = state;
+  const { session, settings, auth, streakMs } = state;
 
   $("statFocus").textContent = fmt(session.focusMs);
   $("statDrift").textContent = fmt(session.driftMs);
@@ -93,6 +110,7 @@ async function refresh(full = false) {
     renderTasks();
     renderSettings(settings);
   }
+  renderAccount(auth);
 }
 
 function collectSettings() {
@@ -101,6 +119,8 @@ function collectSettings() {
   return {
     tone: $("tone").value,
     smartMode: $("smartMode").checked,
+    keyMode: $("keyMode").checked ? "own" : "account",
+    apiBase: $("apiBase").value.trim(),
     apiKey: $("apiKey").value.trim(),
     model: $("model").value,
     useScreenshots: $("useScreenshots").checked,
@@ -126,8 +146,55 @@ $("taskInput").addEventListener("keydown", (e) => {
   renderTasks();
 });
 
-$("smartMode").addEventListener("change", () => {
-  $("smartBox").style.display = $("smartMode").checked ? "block" : "none";
+$("keyMode").addEventListener("change", () => {
+  $("ownKeyBox").style.display = $("keyMode").checked ? "block" : "none";
+});
+
+// ---------------------------------------------------------------- account
+
+$("sendCode").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  if (!email) return;
+  $("authNote").textContent = "Sending…";
+  await send({ type: "SAVE_SETTINGS", settings: collectSettings() });
+  const out = await send({ type: "AUTH_REQUEST_CODE", email });
+  if (out.ok) {
+    $("codeBox").style.display = "block";
+    $("authNote").textContent = `Code sent to ${email}. It expires in 10 minutes.`;
+    $("code").focus();
+  } else {
+    $("authNote").textContent = `✗ ${out.error}`;
+  }
+});
+
+$("verifyCode").addEventListener("click", async () => {
+  const out = await send({
+    type: "AUTH_VERIFY",
+    email: $("email").value.trim(),
+    code: $("code").value.trim()
+  });
+  if (out.ok) {
+    $("authNote").textContent = "";
+    $("codeBox").style.display = "none";
+    $("code").value = "";
+    refresh(true);
+  } else {
+    $("authNote").textContent = `✗ ${out.error}`;
+  }
+});
+
+$("code").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("verifyCode").click();
+});
+
+$("signOut").addEventListener("click", async () => {
+  await send({ type: "AUTH_SIGNOUT" });
+  refresh(true);
+});
+
+$("upgrade").addEventListener("click", async () => {
+  const out = await send({ type: "BILLING_CHECKOUT" });
+  if (!out.ok) $("authNote").textContent = `✗ ${out.error}`;
 });
 
 $("save").addEventListener("click", async () => {
@@ -150,4 +217,6 @@ $("goal").addEventListener("change", () => {
 });
 
 refresh(true);
+// Pull the live plan and usage count; harmless if signed out.
+send({ type: "AUTH_REFRESH" }).then(() => refresh());
 setInterval(refresh, 1000);

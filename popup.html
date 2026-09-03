@@ -35,6 +35,43 @@
     <details class="pad">
       <summary>Settings</summary>
 
+      <div id="account">
+        <div id="signedOut">
+          <label for="email">Sign in — no password, no API key</label>
+          <input id="email" type="email" placeholder="you@example.com" />
+          <button id="sendCode" class="ghost wide">Email me a code</button>
+
+          <div id="codeBox" class="nested" style="display:none">
+            <label for="code">6-digit code</label>
+            <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="000000" />
+            <button id="verifyCode" class="primary wide">Sign in</button>
+          </div>
+          <p class="note" id="authNote"></p>
+        </div>
+
+        <div id="signedIn" style="display:none">
+          <div class="acct">
+            <div>
+              <b id="acctEmail"></b>
+              <div class="note" id="acctUsage"></div>
+            </div>
+            <span class="pill" id="acctPlan">free</span>
+          </div>
+          <button id="upgrade" class="primary wide">Upgrade to Pro</button>
+          <button id="signOut" class="ghost wide">Sign out</button>
+        </div>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="smartMode" />
+        Smart mode — let Claude read the page and write the line
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="useScreenshots" />
+        Send a screenshot of the tab <span class="pro">Pro</span>
+      </label>
+
       <label for="tone">Coach tone</label>
       <select id="tone">
         <option value="hype">Hype — loud and enthusiastic</option>
@@ -42,40 +79,33 @@
         <option value="coach">Coach — blunt, no fluff</option>
       </select>
 
-      <label class="check">
-        <input type="checkbox" id="smartMode" />
-        Smart mode — let Claude read the page and write the line
-      </label>
-
-      <div id="smartBox" class="nested">
-        <label for="apiKey">Anthropic API key</label>
-        <input id="apiKey" type="password" placeholder="sk-ant-..." />
-
-        <label for="model">Model</label>
-        <select id="model">
-          <option value="claude-opus-5">Opus 5 — sharpest, ~$5/$25 per Mtok</option>
-          <option value="claude-sonnet-5">Sonnet 5 — cheaper, ~$2/$10</option>
-          <option value="claude-haiku-4-5">Haiku 4.5 — cheapest, ~$1/$5</option>
-        </select>
-
-        <label class="check">
-          <input type="checkbox" id="useScreenshots" />
-          Send a screenshot of the tab (better judgement, costs more)
-        </label>
-
-        <button id="testKey" class="ghost wide">Test the key</button>
-        <p class="note" id="testResult"></p>
-        <p class="note">
-          At most one API call per minute, and only when the free rules are unsure
-          or you're drifting. Budget roughly $0.01–0.05 an hour with screenshots on.
-        </p>
-      </div>
-
       <label for="focusSites">Always focus (one per line)</label>
       <textarea id="focusSites" rows="3" placeholder="q.utoronto.ca&#10;github.com"></textarea>
 
       <label for="distractSites">Always distraction (one per line)</label>
       <textarea id="distractSites" rows="3" placeholder="youtube.com&#10;reddit.com"></textarea>
+
+      <details class="sub">
+        <summary>Advanced — use my own Anthropic key</summary>
+        <label class="check">
+          <input type="checkbox" id="keyMode" />
+          Bill my own Anthropic account instead of signing in
+        </label>
+        <div id="ownKeyBox" class="nested">
+          <label for="apiKey">Anthropic API key</label>
+          <input id="apiKey" type="password" placeholder="sk-ant-..." />
+          <label for="model">Model</label>
+          <select id="model">
+            <option value="claude-opus-5">Opus 5 — sharpest</option>
+            <option value="claude-sonnet-5">Sonnet 5 — cheaper</option>
+            <option value="claude-haiku-4-5">Haiku 4.5 — cheapest</option>
+          </select>
+          <button id="testKey" class="ghost wide">Test the key</button>
+          <p class="note" id="testResult"></p>
+        </div>
+        <label for="apiBase">API server</label>
+        <input id="apiBase" type="text" placeholder="https://api.focuscoach.app" />
+      </details>
 
       <button id="save" class="ghost wide">Save settings</button>
     </details>

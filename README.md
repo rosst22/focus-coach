@@ -25,25 +25,40 @@ Claude vision call on the live tab — and delivers escalating focus interventio
 Idle time doesn't count either way — walk away from the keyboard for 90 seconds and
 the clocks freeze instead of punishing your streak.
 
-## The two modes
+## Three ways to run it
 
-**Free mode (default).** Classification is a domain list plus a keyword check: sites
-you marked, a built-in list of usual suspects, and whether the page title mentions
-words from your goal. Watching a lecture on YouTube for a course you named in the goal
-counts as focus, not drift. No network calls, no cost, works offline.
+**1. Free mode (no account, no key, works offline).** Classification is a domain
+list plus a keyword check: sites you marked, a built-in list of usual suspects, and
+whether the page title mentions words from your goal. Watching a lecture on YouTube
+for a course you named in the goal counts as focus, not drift. Zero network calls.
 
-**Smart mode (optional, needs an Anthropic API key).** When the free rules are unsure —
-or you're drifting, or you just landed on a new page — it sends the goal, your open
-tasks, the tab title, some of the page's visible text, and optionally a screenshot of
-the tab to Claude, which returns a verdict *and* writes the actual line you see. It's
-what makes the messages specific ("nice, that's the third chi-square question") instead
-of canned.
+**2. Signed in (the normal way).** Type your email in the popup, get a 6-digit code,
+paste it — no password, no API key. Smart mode then routes through the Focus Coach
+API, which classifies with Claude and writes the actual line you see. It's what makes
+the messages specific ("nice, that's the third chi-square question") instead of canned.
 
-Cost control is built in: at most one call per minute, and only when a call could
-change the answer. With screenshots on, expect roughly $0.01–0.05 per hour on Opus 5;
-Sonnet 5 and Haiku 4.5 are in the model dropdown if you want it cheaper. Your key is
-stored in `chrome.storage.local` on this machine only and goes nowhere but
-`api.anthropic.com`.
+| | Free | Pro |
+| --- | --- | --- |
+| Model | Haiku 4.5 | Opus 5 |
+| Smart checks/day | 200 | 2000 |
+| Tab screenshots | — | yes |
+
+Run out of checks and the coach silently falls back to the local rules until the next
+day. It never just stops working.
+
+**3. Your own Anthropic key (Settings → Advanced).** Bills your account, no sign-in,
+picks its own model. This is the path to use if you'd rather nothing left your machine
+except the API call itself.
+
+Cost control is built into every path: at most one call per minute, and only when a
+call could change the answer — the local rules handle the obvious cases for free.
+
+## What the server sees
+
+Only in signed-in mode, and only for a single request: the page title, URL, some
+visible text, and a screenshot if you're on Pro and turned it on. **None of it is
+stored or logged** — the server keeps your email, your plan, and counters (how many
+calls, how many tokens). See [`server/README.md`](server/README.md).
 
 ## Important limit
 
@@ -67,11 +82,13 @@ the Focus Coach card. Content-script changes also need a refresh of any open tab
 
 | Setting | What it does |
 | --- | --- |
+| Sign in | Email + 6-digit code. No password. Enables smart mode without an API key |
 | Coach tone | `hype` (loud), `calm` (quiet), `coach` (blunt) — changes the canned lines and the tone Claude writes in |
-| Smart mode | Turns on the Claude calls; needs a key |
-| Model | Opus 5 by default; Sonnet 5 / Haiku 4.5 are cheaper per call |
-| Screenshot | Sends an image of the tab, not just its text — better judgement on visual pages, more tokens |
+| Smart mode | Turns on the Claude calls |
+| Screenshot | Sends an image of the tab, not just its text — better judgement on visual pages. Pro only |
 | Always focus / Always distraction | Your own domain lists, one per line; they beat the built-in lists |
+| Advanced → own key | Bill your own Anthropic account instead of signing in |
+| Advanced → API server | Point the extension at your own backend |
 
 ## Debugging
 
@@ -83,11 +100,16 @@ the Focus Coach card. Content-script changes also need a refresh of any open tab
 ## Layout
 
 ```
-manifest.json      permissions, entry points
-background.js      the brain: ticking, timing, escalation, message routing
-content.js         the on-page toast/overlay/confetti, in a shadow root
-popup.html/.js/.css  goal, tasks, stats, settings
-lib/heuristics.js  free classification
-lib/claude.js      the Anthropic API call
-lib/messages.js    canned lines by tone
+manifest.json        permissions, entry points
+background.js        the brain: ticking, timing, escalation, message routing
+content.js           the on-page toast/overlay/confetti, in a shadow root
+popup.html/.js/.css  goal, tasks, stats, account, settings
+lib/heuristics.js    free classification
+lib/backend.js       the hosted API client (sign-in, classify, billing)
+lib/claude.js        the direct Anthropic call, for own-key mode
+lib/messages.js      canned lines by tone
+server/              FastAPI backend: auth, quota, Claude proxy, Stripe
 ```
+
+The extension works with no server at all — the backend only exists so people can
+use smart mode without holding an API key.

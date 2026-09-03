@@ -1,0 +1,18 @@
+# Install to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+# Caddy gets and renews the HTTPS certificate automatically. Replace the
+# hostname with yours — a certificate cannot be issued for a bare IP.
+
+api.yourdomain.com {
+    encode gzip
+
+    # Rough abuse ceiling in front of the app's own per-user quota.
+    rate_limit {
+        zone api {
+            key    {remote_host}
+            events 120
+            window 1m
+        }
+    }
+
+    reverse_proxy 127.0.0.1:8080
+}

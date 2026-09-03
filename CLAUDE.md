@@ -49,9 +49,27 @@ There is no build, no test runner, no package.json. To work on it:
 - The call must never be load-bearing: any failure falls back to `heuristics.js` and
   is surfaced in the popup footer.
 
+## The server (`server/`)
+
+FastAPI + SQLite, deployed to the DigitalOcean VPS behind Caddy. Exists purely so
+users don't need their own API key. See `server/README.md` for the deploy runbook.
+
+- Auth is email + 6-digit code, no passwords, ever. Tokens and codes are stored as
+  SHA-256 hashes; code comparison uses `secrets.compare_digest`.
+- **Never store or log page content.** The `/classify` handler logs the exception
+  *type* on failure, not the payload. Keep it that way.
+- Quota is checked before the Anthropic call, so an over-limit user costs nothing.
+- `llm.py` deliberately mirrors `lib/claude.js` — same system prompt, same JSON
+  contract. Change one, change the other, or hosted and own-key users get different
+  behaviour.
+- Model per plan comes from env (`FREE_MODEL` / `PRO_MODEL`), never hardcoded.
+
 ## Things to be careful about
 
 - Don't trigger `alert`/`confirm` from the content script; it blocks the page.
 - `captureVisibleTab` only works on the focused window's active tab and fails silently
   on `chrome://` pages — the screenshot path already swallows that.
 - Alarm periods under 0.5 minutes are ignored by Chrome.
+- The extension must reach the API over HTTPS; Let's Encrypt won't issue a cert for
+  a bare IP, so the server needs a hostname.
+- `.env` and `*.db` are gitignored under `server/`. Never commit a key.
