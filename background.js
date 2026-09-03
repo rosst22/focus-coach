@@ -19,6 +19,7 @@ import {
 } from "./lib/backend.js";
 
 const TICK_ALARM = "focus-coach-tick";
+const BILLING_ALARM = "focus-coach-billing-poll";
 const TICK_MINUTES = 0.5;              // 30s is the shortest period Chrome allows
 const MAX_TICK_DELTA_MS = 90 * 1000;   // ignore gaps bigger than this (laptop slept)
 const IDLE_AFTER_SEC = 90;             // no keyboard/mouse for this long = paused
@@ -178,6 +179,41 @@ async function setBadge(session) {
 
 async function coach(tabId, payload) {
   if (tabId) await tellTab(tabId, { type: "COACH_SHOW", ...payload });
+}
+
+// Stripe confirms the payment to our server, not to the browser, so after we
+// send someone to Checkout we poll /me for a couple of minutes to notice.
+async function pollBilling() {
+  const { settings, auth } = await getAll();
+  const { billingPollUntil = 0 } = await chrome.storage.local.get("billingPollUntil");
+
+  if (!auth.token || Date.now() > billingPollUntil) {
+    await chrome.alarms.clear(BILLING_ALARM);
+    return;
+  }
+  try {
+    const out = await me(settings.apiBase || DEFAULT_API_BASE, auth.token);
+    if (out.plan !== auth.plan) {
+      await saveAuth({
+        token: auth.token,
+        email: out.email,
+        plan: out.plan,
+        quota: out.quota,
+        usedToday: out.used_today
+      });
+      await chrome.alarms.clear(BILLING_ALARM);
+      if (out.plan === "pro") {
+        const tab = await activeTab();
+        await coach(tab?.id, {
+          mood: "celebrate",
+          text: "Pro is live — Opus 5 and tab screenshots are on.",
+          reason: "subscription active"
+        });
+      }
+    }
+  } catch {
+    /* transient — the next tick tries again */
+  }
 }
 
 // ---------------------------------------------------------------- the tick
@@ -376,6 +412,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TICK_ALARM) tick("alarm");
+  if (alarm.name === BILLING_ALARM) pollBilling();
 });
 
 // React immediately when the tab changes, so a nudge doesn't wait for the alarm.
@@ -546,6 +583,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         try {
           const out = await checkoutUrl(settings.apiBase || DEFAULT_API_BASE, auth.token);
           await chrome.tabs.create({ url: out.url });
+          await chrome.storage.local.set({ billingPollUntil: Date.now() + 5 * 60000 });
+          await chrome.alarms.create(BILLING_ALARM, { periodInMinutes: 0.5 });
           sendResponse({ ok: true });
         } catch (err) {
           sendResponse({ ok: false, error: String(err.message || err) });

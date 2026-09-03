@@ -9,8 +9,11 @@ import logging
 import secrets
 import time
 
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
 
 import config
@@ -217,6 +220,23 @@ def portal(user=Depends(current_user)):
     return {"url": session.url}
 
 
+def _plain(value):
+    """StripeObject -> plain dict, all the way down.
+
+    construct_event returns StripeObjects, which deliberately implement neither
+    .get() nor dict iteration, and the helper for this is named differently
+    across stripe-python versions. Converting once here keeps the handler below
+    ordinary dict code.
+    """
+    if hasattr(value, "to_dict"):
+        value = value.to_dict()
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    return value
+
+
 @app.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, stripe_signature: str = Header(default="")):
     stripe = _stripe()
@@ -229,7 +249,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(defaul
         raise HTTPException(400, "bad signature")
 
     kind = event["type"]
-    obj = event["data"]["object"]
+    obj = _plain(event["data"]["object"])
 
     if kind == "checkout.session.completed":
         email = (obj.get("metadata") or {}).get("email") or obj.get("customer_email")
@@ -243,7 +263,22 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(defaul
             db.set_plan(row["email"], "free")
             log.info("downgraded %s to free", row["email"])
 
+    elif kind == "customer.subscription.updated":
+        # Covers the states Stripe reports without deleting the subscription:
+        # a failed card goes past_due/unpaid, a Checkout-abandoned one stays
+        # incomplete. Anything not actively paying drops to free.
+        row = db.user_by_stripe_customer(obj.get("customer"))
+        if row:
+            healthy = obj.get("status") in ("active", "trialing")
+            db.set_plan(row["email"], "pro" if healthy else "free")
+            log.info("subscription %s -> %s", obj.get("status"), row["email"])
+
     return {"received": True}
+
+
+@app.get("/thanks")
+def thanks():
+    return FileResponse(Path(__file__).parent / "static" / "thanks.html")
 
 
 @app.get("/health")

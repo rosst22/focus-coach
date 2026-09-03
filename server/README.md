@@ -29,6 +29,7 @@ error logs record the exception type, never the content that caused it.
 | POST | `/billing/checkout` | bearer | Stripe Checkout URL |
 | POST | `/billing/portal` | bearer | Stripe customer portal URL |
 | POST | `/webhooks/stripe` | signature | Flips a user between `free` and `pro` |
+| GET | `/thanks` | — | Post-checkout page (also handles the cancelled case) |
 | GET | `/health` | — | Liveness |
 
 ## Plans
@@ -105,9 +106,17 @@ systemctl restart focus-coach-api
 
 1. Stripe → create a recurring Price, copy its `price_...` id into `STRIPE_PRICE_ID`
 2. Stripe → Developers → Webhooks → add `https://api.yourdomain.com/webhooks/stripe`,
-   subscribe to `checkout.session.completed`, `customer.subscription.deleted`,
-   `customer.subscription.paused`; copy the signing secret into `STRIPE_WEBHOOK_SECRET`
-3. Put the secret key in `STRIPE_SECRET_KEY` and restart
+   subscribe to `checkout.session.completed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `customer.subscription.paused`; copy the signing
+   secret into `STRIPE_WEBHOOK_SECRET`
+3. Set `BILLING_RETURN_URL=https://api.yourdomain.com/thanks` — the server hosts that
+   page itself, so there is nothing else to deploy
+4. Put the secret key in `STRIPE_SECRET_KEY` and restart
+
+Plan changes are driven **only** by webhooks, never by the browser returning from
+Checkout — a user can't upgrade themselves by visiting a URL. `customer.subscription.updated`
+is handled too, so a failed card (`past_due`) drops the account to free and a fixed
+card restores it without anyone touching the database.
 
 Leave those blank and the billing routes return 503 while the rest of the API
 runs normally.
