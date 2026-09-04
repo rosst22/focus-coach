@@ -25,7 +25,8 @@ There is no build, no test runner, no package.json. To work on it:
 - **`popup.*`** — pure view too. Reads state via `GET_STATE`, sends commands, polls
   once a second while open.
 - **`lib/`** — `heuristics.js` (free classification), `claude.js` (API call),
-  `messages.js` (canned lines).
+  `backend.js` (hosted API client), `personas.js` (coach characters),
+  `messages.js` (picks a canned line for the active persona).
 
 ## Conventions
 
@@ -63,6 +64,24 @@ users don't need their own API key. See `server/README.md` for the deploy runboo
   contract. Change one, change the other, or hosted and own-key users get different
   behaviour.
 - Model per plan comes from env (`FREE_MODEL` / `PRO_MODEL`), never hardcoded.
+
+## Personas
+
+`lib/personas.js` is the single source of truth for a coach's identity: avatar
+(inline SVG), canned lines, and the `style` string Claude writes in. Adding one
+means adding an entry there and nothing else.
+
+- **Built-ins must be original characters.** No real person's name, likeness or
+  catchphrases — that is an impersonation product, a right-of-publicity exposure,
+  and a Web Store policy violation. The `custom` persona exists precisely so a
+  user can write any voice they want, locally, without the project shipping it.
+- The `style` string reaches the model in the **user** turn, labelled as style
+  guidance, never in the system prompt — `customStyle` is free text a user typed,
+  and it should be able to shape the voice without rewriting the rules. Keep it
+  that way if you touch the prompt.
+- `resolvePersona()` maps the old `tone` values (hype/calm/coach) forward, so an
+  existing install keeps a sensible voice after upgrading. Don't drop that until
+  everyone has migrated.
 
 ## Things to be careful about
 

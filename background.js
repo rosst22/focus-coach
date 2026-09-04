@@ -7,6 +7,7 @@
 
 import { classify } from "./lib/heuristics.js";
 import { pick } from "./lib/messages.js";
+import { resolvePersona, DEFAULT_PERSONA } from "./lib/personas.js";
 import { askClaude } from "./lib/claude.js";
 import {
   askBackend,
@@ -32,7 +33,9 @@ const RECOVERY_MIN_DRIFT_MS = 45_000;  // only praise a comeback from a real dri
 const MILESTONES_MIN = [5, 10, 20, 30, 45, 60, 90, 120];
 
 const DEFAULT_SETTINGS = {
-  tone: "hype",                 // hype | calm | coach
+  persona: DEFAULT_PERSONA,     // see lib/personas.js
+  customName: "",               // used when persona === "custom"
+  customStyle: "",              // the voice, in the user's own words
   smartMode: false,
   keyMode: "account",           // "account" = our server pays; "own" = user's key
   apiBase: DEFAULT_API_BASE,
@@ -178,7 +181,15 @@ async function setBadge(session) {
 }
 
 async function coach(tabId, payload) {
-  if (tabId) await tellTab(tabId, { type: "COACH_SHOW", ...payload });
+  if (!tabId) return;
+  // Read the persona here so every call site doesn't have to pass it along.
+  const { settings } = await getAll();
+  const persona = resolvePersona(settings);
+  await tellTab(tabId, {
+    type: "COACH_SHOW",
+    persona: { name: persona.name, avatar: persona.avatar, color: persona.color },
+    ...payload
+  });
 }
 
 // Stripe confirms the payment to our server, not to the browser, so after we
@@ -268,8 +279,10 @@ async function tick(trigger = "alarm") {
     const ctx = await tabContext(tab.id);
     const shot = settings.useScreenshots ? await screenshot(tab.windowId) : null;
     try {
+      const persona = resolvePersona(settings);
       const verdictFromClaude = await smartVerdict(settings, auth, {
-        tone: settings.tone,
+        style: persona.style,
+        personaName: persona.name,
         goal: session.goal,
         tasks: session.tasks,
         url: tab.url,
@@ -340,7 +353,7 @@ async function tick(trigger = "alarm") {
         await coach(tab.id, {
           mood: "nudge",
           level,
-          text: smartMessage || pick(settings.tone, `nudge${level}`, { goal: session.goal || "your work" }),
+          text: smartMessage || pick(settings, `nudge${level}`, { goal: session.goal || "your work" }),
           goal: session.goal,
           reason: result.reason
         });
@@ -355,7 +368,7 @@ async function tick(trigger = "alarm") {
     if (wasDrifting && driftFor >= RECOVERY_MIN_DRIFT_MS) {
       await coach(tab.id, {
         mood: "good",
-        text: smartMessage || pick(settings.tone, "recovery"),
+        text: smartMessage || pick(settings, "recovery"),
         reason: result.reason
       });
     } else {
@@ -367,7 +380,7 @@ async function tick(trigger = "alarm") {
         session.milestonesHit.push(milestone);
         await coach(tab.id, {
           mood: smartCelebrate ? "celebrate" : "good",
-          text: smartMessage || pick(settings.tone, "streak", { m: milestone }),
+          text: smartMessage || pick(settings, "streak", { m: milestone }),
           reason: result.reason
         });
       } else if (smartMessage && smartCelebrate) {
@@ -496,7 +509,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (tab) {
           await coach(tab.id, {
             mood: "celebrate",
-            text: pick(settings.tone, "task", { task: msg.text }),
+            text: pick(settings, "task", { task: msg.text }),
             reason: "task completed"
           });
         }
@@ -597,7 +610,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const out = await askClaude({
             apiKey: msg.apiKey,
             model: msg.model,
-            tone: settings.tone,
+            style: resolvePersona(settings).style,
+            personaName: resolvePersona(settings).name,
             goal: "testing the extension",
             tasks: [],
             url: "https://example.com",

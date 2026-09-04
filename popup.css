@@ -78,3 +78,18 @@ footer { padding: 9px 14px; font-size: 11px; color: var(--dim); min-height: 16px
 details.sub { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
 details.sub summary { font-size: 11px; }
 #account { padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+
+/* --- persona picker --- */
+.personas { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.persona {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  font-family: inherit;
+}
+.persona:hover { border-color: #33404f; }
+.persona.on { border-color: var(--green); background: #16241b; }
+.persona .face { display: flex; flex-shrink: 0; }
+.persona .meta { display: flex; flex-direction: column; min-width: 0; }
+.persona b { font-size: 12.5px; font-weight: 650; }
+.persona i { font-style: normal; font-size: 10.5px; color: var(--dim); }

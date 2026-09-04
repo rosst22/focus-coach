@@ -28,7 +28,10 @@
     }
     .toast.nudge  { border-color: #F59E0B; }
     .toast.nudge2 { border-color: #EF4444; }
-    .emoji { font-size: 20px; line-height: 1.2; }
+    .emoji { font-size: 20px; line-height: 1.2; flex-shrink: 0; }
+    .emoji svg { display: block; border-radius: 50%; }
+    .who { font-size: 10px; font-weight: 700; letter-spacing: .5px;
+           text-transform: uppercase; margin-bottom: 3px; opacity: .75; }
     .body { flex: 1; }
     .why { margin-top: 5px; font-size: 11px; color: #7c8a99; }
     .x {
@@ -85,17 +88,27 @@
     clearTimeout(hideTimer);
   }
 
-  function toast({ mood, text, reason, level }) {
+  function toast({ mood, text, reason, level, persona }) {
     const shadow = mount();
     clear();
     const el = document.createElement("div");
     el.className = `toast ${mood === "nudge" ? (level >= 2 ? "nudge nudge2" : "nudge") : ""}`;
-    const emoji = mood === "celebrate" ? "🎉" : mood === "nudge" ? "👀" : "💪";
     el.innerHTML = `
       <div class="emoji"></div>
-      <div class="body"><div class="text"></div><div class="why"></div></div>
+      <div class="body"><div class="who"></div><div class="text"></div><div class="why"></div></div>
       <button class="x" title="dismiss">×</button>`;
-    el.querySelector(".emoji").textContent = emoji;
+
+    const slot = el.querySelector(".emoji");
+    if (persona?.avatar) {
+      // Fixed markup from lib/personas.js, never user input.
+      slot.innerHTML = persona.avatar;
+    } else {
+      slot.textContent = mood === "celebrate" ? "🎉" : mood === "nudge" ? "👀" : "💪";
+    }
+    const who = el.querySelector(".who");
+    who.textContent = persona?.name || "";
+    if (persona?.color) who.style.color = persona.color;
+
     el.querySelector(".text").textContent = text;
     el.querySelector(".why").textContent = reason || "";
     el.querySelector(".x").addEventListener("click", clear);
@@ -104,13 +117,14 @@
     if (mood === "celebrate") confetti();
   }
 
-  function overlay({ text, goal }) {
+  function overlay({ text, goal, persona }) {
     const shadow = mount();
     clear();
     const scrim = document.createElement("div");
     scrim.className = "scrim";
     scrim.innerHTML = `
       <div class="card">
+        <div class="face"></div>
         <h1></h1>
         <div class="goal"></div>
         <div class="row">
@@ -118,6 +132,13 @@
           <button class="act ghost">5 more minutes</button>
         </div>
       </div>`;
+    if (persona?.avatar) {
+      const face = scrim.querySelector(".face");
+      face.innerHTML = persona.avatar;
+      face.style.transform = "scale(1.9)";
+      face.style.margin = "6px auto 22px";
+      face.style.width = "34px";
+    }
     scrim.querySelector("h1").textContent = text;
     scrim.querySelector(".goal").textContent = goal ? `Your goal: ${goal}` : "You set out to do real work.";
     scrim.querySelector(".primary").addEventListener("click", () => {

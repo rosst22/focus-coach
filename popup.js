@@ -1,6 +1,8 @@
 // Popup UI. Holds no state of its own — it reads from the background worker,
 // sends messages back, and re-renders once a second while it's open.
 
+import { PERSONAS, CUSTOM_AVATAR } from "./lib/personas.js";
+
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
@@ -46,8 +48,40 @@ function renderTasks() {
   });
 }
 
+let selectedPersona = "hype";
+
+function renderPersonas() {
+  const grid = $("personas");
+  grid.innerHTML = "";
+
+  const entries = [
+    ...Object.entries(PERSONAS).map(([id, p]) => [id, p.name, p.tagline, p.avatar]),
+    ["custom", "Make your own", "Write the voice yourself.", CUSTOM_AVATAR]
+  ];
+
+  entries.forEach(([id, name, tagline, avatar]) => {
+    const card = document.createElement("button");
+    card.className = `persona${id === selectedPersona ? " on" : ""}`;
+    card.type = "button";
+    card.innerHTML = `<span class="face">${avatar}</span>
+      <span class="meta"><b></b><i></i></span>`;
+    card.querySelector("b").textContent = name;
+    card.querySelector("i").textContent = tagline;
+    card.addEventListener("click", () => {
+      selectedPersona = id;
+      $("customBox").style.display = id === "custom" ? "block" : "none";
+      renderPersonas();
+    });
+    grid.appendChild(card);
+  });
+}
+
 function renderSettings(s) {
-  $("tone").value = s.tone;
+  selectedPersona = s.persona || "hype";
+  renderPersonas();
+  $("customName").value = s.customName || "";
+  $("customStyle").value = s.customStyle || "";
+  $("customBox").style.display = selectedPersona === "custom" ? "block" : "none";
   $("smartMode").checked = s.smartMode;
   $("keyMode").checked = s.keyMode === "own";
   $("apiKey").value = s.apiKey;
@@ -117,7 +151,9 @@ function collectSettings() {
   const lines = (id) =>
     $(id).value.split("\n").map((l) => l.trim()).filter(Boolean);
   return {
-    tone: $("tone").value,
+    persona: selectedPersona,
+    customName: $("customName").value.trim(),
+    customStyle: $("customStyle").value.trim(),
     smartMode: $("smartMode").checked,
     keyMode: $("keyMode").checked ? "own" : "account",
     apiBase: $("apiBase").value.trim(),

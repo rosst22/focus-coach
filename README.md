@@ -25,6 +25,31 @@ Claude vision call on the live tab — and delivers escalating focus interventio
 Idle time doesn't count either way — walk away from the keyboard for 90 seconds and
 the clocks freeze instead of punishing your streak.
 
+## Who's coaching you
+
+Six voices. Each one has its own avatar, its own canned lines for when you're
+offline, and its own style instruction that Claude writes in for smart mode — so
+the character holds whether or not the API is involved.
+
+![The persona picker and four coaches reacting](docs/personas.png)
+
+| | |
+| --- | --- |
+| **The Sergeant** | Blunt. No sympathy. Short imperatives. |
+| **The Monk** | Unhurried, kind, slightly unsettling. |
+| **The Hype Friend** | Loud, delighted, fully on your side. |
+| **The Supervisor** | Quiet, measured, devastating. |
+| **The Golden Retriever** | Relentlessly, stupidly supportive. |
+| **Make your own** | You write the voice, in your own words. |
+
+**On celebrity coaches:** the built-in personas are all original, deliberately.
+Shipping a persona built on a real person's name, face or catchphrases would make
+this an impersonation product — a right-of-publicity problem in eight US states
+and a Chrome Web Store policy violation, whichever way the product is monetised.
+"Make your own" is the answer: describe any voice you like, in your own words. It
+is stored in your browser and never ships with the extension. Please don't send a
+PR adding a real person as a built-in.
+
 ## Three ways to run it
 
 **1. Free mode (no account, no key, works offline).** Classification is a domain
@@ -83,7 +108,7 @@ the Focus Coach card. Content-script changes also need a refresh of any open tab
 | Setting | What it does |
 | --- | --- |
 | Sign in | Email + 6-digit code. No password. Enables smart mode without an API key |
-| Coach tone | `hype` (loud), `calm` (quiet), `coach` (blunt) — changes the canned lines and the tone Claude writes in |
+| Persona | Which of the six coaches you get — changes the avatar, the canned lines and the voice Claude writes in |
 | Smart mode | Turns on the Claude calls |
 | Screenshot | Sends an image of the tab, not just its text — better judgement on visual pages. Pro only |
 | Always focus / Always distraction | Your own domain lists, one per line; they beat the built-in lists |
@@ -104,6 +129,7 @@ manifest.json        permissions, entry points
 background.js        the brain: ticking, timing, escalation, message routing
 content.js           the on-page toast/overlay/confetti, in a shadow root
 popup.html/.js/.css  goal, tasks, stats, account, settings
+lib/personas.js      the six coaches: avatars, voices, canned lines
 lib/heuristics.js    free classification
 lib/backend.js       the hosted API client (sign-in, classify, billing)
 lib/claude.js        the direct Anthropic call, for own-key mode

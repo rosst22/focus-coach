@@ -72,12 +72,17 @@
         Send a screenshot of the tab <span class="pro">Pro</span>
       </label>
 
-      <label for="tone">Coach tone</label>
-      <select id="tone">
-        <option value="hype">Hype — loud and enthusiastic</option>
-        <option value="calm">Calm — quiet and kind</option>
-        <option value="coach">Coach — blunt, no fluff</option>
-      </select>
+      <label>Who's coaching you?</label>
+      <div class="personas" id="personas"></div>
+
+      <div id="customBox" class="nested" style="display:none">
+        <label for="customName">Name</label>
+        <input id="customName" type="text" maxlength="40" placeholder="e.g. Coach K" />
+        <label for="customStyle">How should they talk?</label>
+        <textarea id="customStyle" rows="4" maxlength="400"
+          placeholder="Describe the voice in your own words — how they talk, how blunt they are, what they care about."></textarea>
+        <p class="note">Stays in your browser. Sent with each check as style guidance.</p>
+      </div>
 
       <label for="focusSites">Always focus (one per line)</label>
       <textarea id="focusSites" rows="3" placeholder="q.utoronto.ca&#10;github.com"></textarea>
@@ -111,6 +116,6 @@
     </details>
 
     <footer id="footer"></footer>
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>

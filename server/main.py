@@ -171,7 +171,10 @@ class ClassifyIn(BaseModel):
     title: str = ""
     url: str = ""
     text: str = ""
-    tone: str = "hype"
+    # The coach persona. `style` may be free text the user wrote, so it is
+    # length-capped here and passed to the model as style guidance only.
+    style: str = Field(default="Direct and encouraging.", max_length=400)
+    persona_name: str = Field(default="Coach", max_length=40)
     screenshot: str | None = None
 
 
@@ -194,7 +197,8 @@ async def classify(body: ClassifyIn, user=Depends(current_user)):
     try:
         result = await llm.classify(
             model=config.plan_model(plan),
-            tone=body.tone,
+            style=body.style,
+            persona_name=body.persona_name,
             goal=body.goal,
             tasks=body.tasks[:20],
             title=body.title[:300],
